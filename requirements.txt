@@ -1,9 +1,7 @@
-runpod>=1.7.6
-transformers>=4.57,<5
-peft>=0.17,<0.18
-accelerate>=1.6,<2
-bitsandbytes>=0.45,<1
-paddleocr
-paddlepaddle
-python-docx>=1.1
-huggingface_hub>=0.30
+transformers>=4.51.0
+peft>=0.15.0
+bitsandbytes>=0.45.0
+accelerate>=1.6.0
+python-docx>=1.1.2
+requests>=2.32.0
+runpod>=1.7.0

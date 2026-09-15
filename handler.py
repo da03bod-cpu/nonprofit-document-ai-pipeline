@@ -1,16 +1,11 @@
 import runpod
-from pipeline.pipeline import process_file
+from pipeline.pipeline import process_request
 
 def handler(job):
     try:
-        job_input = job.get("input", {})
-        if not isinstance(job_input, dict):
-            raise ValueError("input must be an object")
-        file_url = job_input.get("file_url")
-        if not file_url:
-            raise ValueError("input.file_url is required")
-        return process_file(file_url)
+        return process_request(job.get("input", job))
     except Exception as exc:
-        return {"status": "ERROR", "error": str(exc)}
+        return {"success": False, "error": str(exc), "type": type(exc).__name__}
 
-runpod.serverless.start({"handler": handler})
+if __name__ == "__main__":
+    runpod.serverless.start({"handler": handler})
