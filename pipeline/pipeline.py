@@ -12,54 +12,167 @@ from pipeline.qwen import generate_structured
 from pipeline.router import detect_document_type
 from pipeline.validator import validate_output
 
-def _download(url):
-    suffix = Path(urlparse(url).path).suffix.lower()
+
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".json"}
+
+
+def _extension_from_name(name):
+    if not name:
+        return ""
+    return Path(str(name)).suffix.lower()
+
+
+def _extension_from_content_type(content_type):
+    ct = (content_type or "").lower().split(";")[0].strip()
+
+    if ct == "application/pdf":
+        return ".pdf"
+
+    if ct in {
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+    }:
+        return ".docx"
+
+    if ct in {
+        "application/json",
+        "text/json",
+    }:
+        return ".json"
+
+    return ""
+
+
+def _extension_from_magic(data):
+    if data.startswith(b"%PDF"):
+        return ".pdf"
+
+    # DOCX is a ZIP container.
+    if data.startswith(b"PK"):
+        return ".docx"
+
+    stripped = data.lstrip()
+    if stripped.startswith(b"{") or stripped.startswith(b"["):
+        return ".json"
+
+    return ""
+
+
+def _download(url, file_name=None):
+    url_suffix = _extension_from_name(urlparse(url).path)
+    name_suffix = _extension_from_name(file_name)
+
+    # Prefer the original filename coming from n8n/Google Drive.
+    suffix = name_suffix if name_suffix in SUPPORTED_EXTENSIONS else url_suffix
+
     fd, path = tempfile.mkstemp(suffix=suffix if suffix else ".bin")
     os.close(fd)
 
-    r = requests.get(url, timeout=120, stream=True)
-    r.raise_for_status()
+    try:
+        r = requests.get(url, timeout=120, stream=True)
+        r.raise_for_status()
 
-    if suffix not in {".pdf", ".docx", ".doc", ".json"}:
-        ct = r.headers.get("content-type", "").lower()
-        if "pdf" in ct:
-            new_suffix = ".pdf"
-        elif "officedocument" in ct or "word" in ct:
-            new_suffix = ".docx"
-        elif "json" in ct:
-            new_suffix = ".json"
-        else:
+        # If extension is still unknown, use Content-Type.
+        if suffix not in SUPPORTED_EXTENSIONS:
+            suffix = _extension_from_content_type(
+                r.headers.get("content-type", "")
+            )
+
+        # Read enough data to identify common document formats.
+        first_chunk = next(r.iter_content(1024 * 1024), b"")
+
+        if suffix not in SUPPORTED_EXTENSIONS:
+            suffix = _extension_from_magic(first_chunk)
+
+        if suffix not in SUPPORTED_EXTENSIONS:
+            ct = r.headers.get("content-type", "")
+            raise ValueError(
+                f"Unsupported document type. "
+                f"file_name={file_name!r}, "
+                f"content_type={ct!r}"
+            )
+
+        # Rename temporary file to the detected extension.
+        final_path = path
+        if not path.endswith(suffix):
+            final_path = path + suffix
+
+        if final_path != path:
+            os.replace(path, final_path)
+            path = final_path
+
+        with open(path, "wb") as f:
+            if first_chunk:
+                f.write(first_chunk)
+
+            for chunk in r.iter_content(1024 * 1024):
+                if chunk:
+                    f.write(chunk)
+
+        return path
+
+    except Exception:
+        try:
             os.unlink(path)
-            raise ValueError(f"Unsupported content type: {ct}")
-        new_path = path + new_suffix
-        os.replace(path, new_path)
-        path = new_path
+        except OSError:
+            pass
+        raise
 
-    with open(path, "wb") as f:
-        for chunk in r.iter_content(1024 * 1024):
-            if chunk:
-                f.write(chunk)
-    return path
 
 def process_request(job_input):
     if not isinstance(job_input, dict):
         raise ValueError("input must be a JSON object.")
 
-    url = job_input.get("file_url") or job_input.get("url") or job_input.get("document_url")
+    url = (
+        job_input.get("file_url")
+        or job_input.get("url")
+        or job_input.get("document_url")
+    )
+
     if not url:
         raise ValueError("Missing file_url.")
 
-    path = _download(url)
+    file_name = (
+        job_input.get("file_name")
+        or job_input.get("filename")
+        or job_input.get("name")
+    )
+
+    path = _download(url, file_name=file_name)
+
     try:
         kind = detect_document_type(path)
-        text = ocr_pdf(path) if kind == "pdf" else parse_document(path, kind)
+
+        if kind == "pdf":
+            text = ocr_pdf(path)
+        else:
+            text = parse_document(path, kind)
+
         if not text.strip():
             raise ValueError("No usable document text was extracted.")
 
         text = text[:MAX_INPUT_CHARS]
-        result = validate_output(generate_structured(text))
 
-        return {"success": True, "document_type": kind, "result": result}
+        result = validate_output(
+            generate_structured(text)
+        )
+
+        # Return the final schema directly under the RunPod output.
+        # This makes output.programs available to n8n.
+        if not isinstance(result, dict):
+            raise ValueError("Model output must be a JSON object.")
+
+        if "programs" not in result:
+            raise ValueError(
+                "Model output is missing the 'programs' field."
+            )
+
+        return {
+            "success": True,
+            "document_type": kind,
+            "programs": result["programs"],
+        }
+
     finally:
         try:
             os.unlink(path)
