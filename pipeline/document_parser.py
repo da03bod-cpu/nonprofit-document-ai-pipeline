@@ -1,30 +1,30 @@
 import json
+from docx import Document
 
-def parse_json(file_path: str) -> str:
-    with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    return json.dumps(data, ensure_ascii=False, indent=2)
-
-def parse_docx(file_path: str) -> str:
-    from docx import Document
-
+def parse_docx(file_path):
     doc = Document(file_path)
-    parts = []
+    chunks = []
 
     for paragraph in doc.paragraphs:
         text = paragraph.text.strip()
         if text:
-            parts.append(text)
+            chunks.append(text)
 
-    for table in doc.tables:
+    for i, table in enumerate(doc.tables, 1):
+        chunks.append(f"===== TABLE {i} =====")
         for row in table.rows:
-            parts.append(" | ".join(cell.text.strip() for cell in row.cells))
+            cells = [c.text.strip().replace("\n", " ") for c in row.cells]
+            chunks.append(" | ".join(cells))
 
-    return "\n".join(parts)
+    return "\n".join(chunks).strip()
 
-def parse_document(file_path: str, source_type: str) -> str:
-    if source_type == "json":
-        return parse_json(file_path)
-    if source_type == "docx":
+def parse_json(file_path):
+    with open(file_path, "r", encoding="utf-8") as f:
+        return json.dumps(json.load(f), ensure_ascii=False, indent=2)
+
+def parse_document(file_path, document_type):
+    if document_type == "docx":
         return parse_docx(file_path)
-    raise ValueError(f"Unsupported document type: {source_type}")
+    if document_type == "json":
+        return parse_json(file_path)
+    raise ValueError(f"Unsupported parser type: {document_type}")

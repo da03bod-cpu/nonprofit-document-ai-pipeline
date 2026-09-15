@@ -1,21 +1,37 @@
-import json
+def _number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
-def parse_model_output(text: str):
-    text = text.strip()
+def validate_output(data):
+    if not isinstance(data, dict):
+        raise ValueError("Model output must be a JSON object.")
 
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
+    programs = data.get("programs")
+    if not isinstance(programs, list):
+        raise ValueError("Model output must contain a 'programs' array.")
 
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            return json.loads(text[start:end + 1])
-        raise ValueError("Qwen output is not valid JSON")
+    allowed = {
+        "type", "name", "year", "description", "beneficiaries_count",
+        "budget", "beneficiary_value", "target_audience",
+        "delivery_method", "notes"
+    }
+
+    cleaned = []
+    for i, item in enumerate(programs):
+        if not isinstance(item, dict):
+            raise ValueError(f"programs[{i}] must be an object.")
+
+        item = {k: item.get(k) for k in allowed}
+
+        if not isinstance(item.get("name"), str) or not item["name"].strip():
+            raise ValueError(f"programs[{i}].name must be a non-empty string.")
+
+        if item["year"] is not None and not _number(item["year"]):
+            raise ValueError(f"programs[{i}].year must be a number or null.")
+
+        if item["beneficiaries_count"] is not None and not _number(item["beneficiaries_count"]):
+            raise ValueError(f"programs[{i}].beneficiaries_count must be a number or null.")
+
+        item["type"] = item.get("type") or "program"
+        cleaned.append(item)
+
+    return {"programs": cleaned}

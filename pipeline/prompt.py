@@ -1,38 +1,45 @@
-SYSTEM_PROMPT = """You are a specialized information extraction model for Arabic nonprofit annual reports.
-
-Extract programs and projects from the supplied document content.
-
-Return ONLY valid JSON. Do not use Markdown fences. Do not add explanations.
-
-For one program/project use:
-{
-  "type": "program",
-  "name": "...",
-  "year": 2025,
-  "description": "...",
-  "beneficiaries_count": null,
-  "budget": null,
-  "beneficiary_value": "...",
-  "target_audience": "...",
-  "delivery_method": "...",
-  "notes": "..."
-}
-
-For multiple programs/projects use:
-{
-  "programs_and_projects": [
-    { ... }
-  ]
-}
-
-Do not invent information. Use null when a value is not stated.
+SYSTEM_PROMPT = """أنت نموذج متخصص في استخراج البرامج والمشاريع والمبادرات والأنشطة من التقارير السنوية للجمعيات غير الربحية.
+اقرأ نص OCR كما هو، حتى لو احتوى على أخطاء OCR بسيطة.
+استخرج البرامج والمشاريع والأنشطة المذكورة فعليًا فقط.
+أعد JSON فقط وفق المخطط المطلوب، ولا تضف شرحًا خارج JSON.
+صحح أخطاء OCR الواضحة فقط عندما يكون التصحيح مؤكدًا من السياق، ولا تخترع معلومات غير موجودة.
+إذا كانت قيمة غير موجودة بوضوح في التقرير، استخدم null.
 """
 
-def build_messages(content: str):
+SCHEMA = """{
+  "programs": [
+    {
+      "type": "program",
+      "name": "string",
+      "year": "number|null",
+      "description": "string|null",
+      "beneficiaries_count": "number|null",
+      "budget": "number|string|null",
+      "beneficiary_value": "string|null",
+      "target_audience": "string|null",
+      "delivery_method": "string|null",
+      "notes": "string|null"
+    }
+  ]
+}"""
+
+def build_messages(document_text):
+    user_prompt = f"""استخرج البرامج والمشاريع والمبادرات والأنشطة من النص التالي.
+
+يجب أن يكون الإخراج JSON فقط بهذا الشكل:
+{SCHEMA}
+
+قواعد مهمة:
+- لا تضف أي مفتاح خارج المخطط.
+- لا تخترع أي برنامج أو رقم أو ميزانية.
+- إذا لم توجد معلومة استخدم null.
+- احتفظ بالأسماء والمعلومات كما وردت في التقرير مع تصحيح أخطاء OCR الواضحة فقط.
+- كل عنصر مستخرج يمثل برنامجًا أو مشروعًا أو مبادرة أو نشاطًا فعليًا مذكورًا في التقرير.
+
+النص:
+{document_text}
+"""
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": "استخرج البرامج والمشاريع من المحتوى التالي، وأعد النتيجة كـ JSON فقط.\n\n" + content,
-        },
+        {"role": "user", "content": user_prompt},
     ]
