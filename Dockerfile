@@ -2,6 +2,8 @@ FROM ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-vl:latest-nvidi
 
 WORKDIR /app
 
+USER root
+
 ENV PYTHONUNBUFFERED=1 \
     HF_HUB_DISABLE_XET=1 \
     HF_HOME=/runpod-volume/huggingface \
