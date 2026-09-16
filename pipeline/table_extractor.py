@@ -139,6 +139,32 @@ def _split_embedded_partner(name):
     return name, None
 
 
+def _build_description(name, entity, embedded_partner_name, audience, count, budget_num):
+    """
+    Always returns a non-empty description sentence, generated from
+    the project name plus whatever surrounding info is available
+    (partner entity, target audience, beneficiaries count, budget).
+    This is used when the table has no separate narrative/description
+    column to pull from.
+    """
+    clauses = [f"مشروع {name}"]
+
+    if audience:
+        clauses.append(f"يستهدف فئة {audience}")
+
+    partners = [p for p in (entity, embedded_partner_name) if p]
+    if partners:
+        clauses.append(f"بالشراكة مع {' و'.join(partners)}")
+
+    if count is not None:
+        clauses.append(f"استفاد منه {count} مستفيد")
+
+    if budget_num is not None:
+        clauses.append(f"بميزانية {budget_num} ريال سعودي حسب الوارد في التقرير")
+
+    return "، ".join(clauses) + "."
+
+
 def extract_projects_from_docx(file_path, year=None):
     """
     Returns a list of program/project dicts matching the pipeline's
@@ -180,22 +206,20 @@ def extract_projects_from_docx(file_path, year=None):
                 if embedded_partner else None
             )
 
-            if entity and embedded_partner_name:
-                description = f"بالشراكة مع {entity} ({embedded_partner_name})"
-            elif entity:
-                description = f"بالشراكة مع {entity}"
-            elif embedded_partner_name:
-                description = f"بالشراكة مع {embedded_partner_name}"
-            else:
-                description = None
+            count_num = _to_number(count_raw)
+            budget_num = _to_number(budget_raw)
+
+            description = _build_description(
+                name, entity, embedded_partner_name, audience, count_num, budget_num
+            )
 
             programs.append({
                 "type": "project",
                 "name": name,
                 "year": year,
                 "description": description,
-                "beneficiaries_count": _to_number(count_raw),
-                "budget": _to_number(budget_raw) if _to_number(budget_raw) is not None else (budget_raw or None),
+                "beneficiaries_count": count_num,
+                "budget": budget_num if budget_num is not None else (budget_raw or None),
                 "beneficiary_value": None,
                 "target_audience": audience or None,
                 "delivery_method": None,
