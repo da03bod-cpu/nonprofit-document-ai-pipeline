@@ -29,9 +29,10 @@ RUN rm -rf /tmp/qwen3-training /app/lora-release && \
 COPY config.py handler.py requirements.txt ./
 COPY pipeline/ ./pipeline/
 
-# requirements.txt is installed AFTER the pinned CUDA build of torch above,
-# with --no-deps so pip cannot pull in a different torch build and break the
-# CUDA wheel that was just installed.
-RUN python -m pip install --no-cache-dir --no-deps -r requirements.txt
+# requirements.txt is installed AFTER the pinned CUDA build of torch above.
+# (No --no-deps here: runpod pulls in paramiko as a transitive dependency
+# for its CLI ssh module, which is imported even in serverless/worker mode.
+# Stripping deps broke that import entirely.)
+RUN python -m pip install --no-cache-dir -r requirements.txt
 
 CMD ["python", "-u", "handler.py"]
