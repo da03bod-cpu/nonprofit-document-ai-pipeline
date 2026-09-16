@@ -65,4 +65,8 @@ def generate_structured(document_text):
 
     generated = outputs[0][inputs["input_ids"].shape[-1]:]
     decoded = tokenizer.decode(generated, skip_special_tokens=True).strip()
+
+    print("========== QWEN RAW OUTPUT ==========")
+    print(decoded)
+    print("========== END QWEN RAW OUTPUT ==========")
     return _extract_json(decoded)
