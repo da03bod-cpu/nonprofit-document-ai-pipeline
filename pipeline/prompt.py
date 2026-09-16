@@ -11,9 +11,9 @@ SCHEMA = """{
     {
       "type": "program",
       "name": "string",
-      "year": "number|null",
+      "year": null,
       "description": "string|null",
-      "beneficiaries_count": "number|null",
+      "beneficiaries_count": null,
       "budget": "number|string|null",
       "beneficiary_value": "string|null",
       "target_audience": "string|null",
