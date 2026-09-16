@@ -10,6 +10,7 @@ from pipeline.document_parser import parse_document
 from pipeline.ocr import ocr_pdf
 from pipeline.qwen import generate_structured
 from pipeline.router import detect_document_type
+from pipeline.table_extractor import extract_projects_from_docx
 from pipeline.validator import validate_output
 
 
@@ -143,6 +144,25 @@ def process_request(job_input):
     try:
         kind = detect_document_type(path)
 
+        if kind == "docx":
+            # Structured annual/impact reports usually list every
+            # project/program in Word tables. Extracting those
+            # directly is deterministic and complete; the LLM (with
+            # the current LoRA) only ever returns a single item per
+            # document, so it's used as a fallback only when no
+            # recognizable project table is found.
+            table_programs = extract_projects_from_docx(
+                path, year=job_input.get("year")
+            )
+            if table_programs:
+                result = validate_output({"programs": table_programs})
+                return {
+                    "success": True,
+                    "document_type": kind,
+                    "extraction_method": "docx_tables",
+                    "programs": result["programs"],
+                }
+
         if kind == "pdf":
             text = ocr_pdf(path)
         else:
@@ -170,6 +190,7 @@ def process_request(job_input):
         return {
             "success": True,
             "document_type": kind,
+            "extraction_method": "llm",
             "programs": result["programs"],
         }
 
