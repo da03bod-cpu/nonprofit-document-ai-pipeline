@@ -4,12 +4,13 @@ from docx.table import Table
 from docx.text.paragraph import Paragraph
 from docx.oxml.text.paragraph import CT_P
 from docx.oxml.table import CT_Tbl
+
 import json
 
 
 def iter_block_items(parent):
     """
-    Iterate through paragraphs and tables in their actual
+    Iterate through paragraphs and tables in their original
     document order.
     """
 
@@ -27,10 +28,75 @@ def iter_block_items(parent):
             yield Table(child, parent)
 
 
+def clean_text(text):
+    """
+    Clean unnecessary whitespace while preserving Arabic text.
+    """
+
+    if not text:
+        return ""
+
+    text = text.replace("\xa0", " ")
+    text = text.replace("\r", " ")
+    text = text.replace("\t", " ")
+
+    # Remove duplicated spaces
+    text = " ".join(text.split())
+
+    return text.strip()
+
+
+def parse_table(table):
+    """
+    Convert a Word table into readable text while preserving
+    row and column structure.
+    """
+
+    rows = []
+
+    for row in table.rows:
+
+        cells = []
+
+        for cell in row.cells:
+
+            cell_text = cell.text.strip()
+
+            # Preserve line breaks inside cells
+            cell_text = cell_text.replace("\n", " ")
+            cell_text = cell_text.replace("\r", " ")
+
+            cell_text = clean_text(cell_text)
+
+            cells.append(cell_text)
+
+        # Ignore completely empty rows
+        if any(cell for cell in cells):
+
+            row_text = " | ".join(cells)
+
+            rows.append(row_text)
+
+    if not rows:
+        return ""
+
+    return "\n".join(rows)
+
+
 def parse_docx(file_path):
     """
-    Parse a DOCX file while preserving the original order
-    of paragraphs and tables.
+    Extract text from DOCX while preserving the original
+    order of paragraphs and tables.
+
+    Example:
+
+        Paragraph
+        Paragraph
+        Table
+        Paragraph
+        Table
+
+    will remain in exactly that order.
     """
 
     doc = Document(file_path)
@@ -39,66 +105,67 @@ def parse_docx(file_path):
 
     for block in iter_block_items(doc):
 
-        # -------------------------
+        # -----------------------------------------
         # Paragraph
-        # -------------------------
+        # -----------------------------------------
         if isinstance(block, Paragraph):
 
-            text = block.text.strip()
+            text = clean_text(block.text)
 
             if text:
                 chunks.append(text)
 
-        # -------------------------
+        # -----------------------------------------
         # Table
-        # -------------------------
+        # -----------------------------------------
         elif isinstance(block, Table):
 
-            rows = []
+            table_text = parse_table(block)
 
-            for row in block.rows:
+            if table_text:
 
-                cells = [
-                    cell.text.strip().replace("\n", " ")
-                    for cell in row.cells
-                ]
+                chunks.append("===== TABLE START =====")
 
-                # Ignore completely empty rows
-                if any(cells):
-                    rows.append(" | ".join(cells))
+                chunks.append(table_text)
 
-            if rows:
-
-                chunks.append("===== TABLE =====")
-
-                chunks.extend(rows)
+                chunks.append("===== TABLE END =====")
 
     return "\n".join(chunks).strip()
 
 
 def parse_json(file_path):
     """
-    Parse JSON file and return it as formatted text.
+    Read JSON file and convert it to formatted UTF-8 text.
     """
 
     with open(file_path, "r", encoding="utf-8") as f:
 
-        return json.dumps(
-            json.load(f),
-            ensure_ascii=False,
-            indent=2
-        )
+        data = json.load(f)
+
+    return json.dumps(
+        data,
+        ensure_ascii=False,
+        indent=2
+    )
 
 
 def parse_document(file_path, document_type):
     """
-    Route the file to the correct parser.
+    Main document parser.
+
+    Supported:
+        - docx
+        - json
     """
 
+    document_type = document_type.lower().strip()
+
     if document_type == "docx":
+
         return parse_docx(file_path)
 
     if document_type == "json":
+
         return parse_json(file_path)
 
     raise ValueError(
