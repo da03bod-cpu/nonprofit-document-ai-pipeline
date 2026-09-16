@@ -2,6 +2,16 @@ def _number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 def validate_output(data):
+    # Qwen (with the current LoRA) sometimes ignores the "programs"
+    # wrapper in the prompt schema and returns a single flat object
+    # (e.g. {"type": "program", "name": ..., ...}) or a bare JSON
+    # array instead of {"programs": [...]}. Normalize those shapes
+    # here instead of failing the whole job.
+    if isinstance(data, list):
+        data = {"programs": data}
+    elif isinstance(data, dict) and "programs" not in data and "name" in data:
+        data = {"programs": [data]}
+
     if not isinstance(data, dict):
         raise ValueError("Model output must be a JSON object.")
 
