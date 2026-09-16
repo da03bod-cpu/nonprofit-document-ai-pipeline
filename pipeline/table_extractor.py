@@ -120,6 +120,25 @@ def _to_number(text):
     return None
 
 
+_PARTNER_SPLIT_RE = re.compile(r"\s*بالشراكة مع\s*")
+
+
+def _split_embedded_partner(name):
+    """
+    Some report tables wrap the partner note into the SAME cell as the
+    project name, on a second line, e.g.:
+        "كفالة الأيتام\n بالشراكة مع شركة سابك"
+    Once whitespace/newlines are collapsed this reads as one name
+    ("كفالة الأيتام بالشراكة مع شركة سابك"). Split it back into the
+    real project name and a partner note.
+    Returns (clean_name, partner_note_or_None).
+    """
+    parts = _PARTNER_SPLIT_RE.split(name, maxsplit=1)
+    if len(parts) == 2 and parts[0].strip():
+        return parts[0].strip(), f"بالشراكة مع {parts[1].strip()}"
+    return name, None
+
+
 def extract_projects_from_docx(file_path, year=None):
     """
     Returns a list of program/project dicts matching the pipeline's
@@ -154,11 +173,27 @@ def extract_projects_from_docx(file_path, year=None):
             entity = cells[cols["entity"]] if cols.get("entity") is not None else ""
             audience = cells[cols["type"]] if cols["type"] is not None else None
 
+            name, embedded_partner = _split_embedded_partner(name)
+            # embedded_partner looks like "بالشراكة مع X" already.
+            embedded_partner_name = (
+                embedded_partner.replace("بالشراكة مع", "", 1).strip()
+                if embedded_partner else None
+            )
+
+            if entity and embedded_partner_name:
+                description = f"بالشراكة مع {entity} ({embedded_partner_name})"
+            elif entity:
+                description = f"بالشراكة مع {entity}"
+            elif embedded_partner_name:
+                description = f"بالشراكة مع {embedded_partner_name}"
+            else:
+                description = None
+
             programs.append({
                 "type": "project",
                 "name": name,
                 "year": year,
-                "description": f"بالشراكة مع {entity}" if entity else None,
+                "description": description,
                 "beneficiaries_count": _to_number(count_raw),
                 "budget": _to_number(budget_raw) if _to_number(budget_raw) is not None else (budget_raw or None),
                 "beneficiary_value": None,
