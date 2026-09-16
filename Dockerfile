@@ -15,15 +15,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 RUN python -m pip install --no-cache-dir \
-    "torch==2.6.0" --index-url https://download.pytorch.org/whl/cu124 && \
-    python -m pip install --no-cache-dir \
-    "transformers>=4.51.0" \
-    "peft>=0.15.0" \
-    "bitsandbytes>=0.45.0" \
-    "accelerate>=1.6.0" \
-    "python-docx>=1.1.2" \
-    "requests>=2.32.0" \
-    "runpod>=1.7.0"
+    "torch==2.6.0" --index-url https://download.pytorch.org/whl/cu124
 
 RUN rm -rf /tmp/qwen3-training /app/lora-release && \
     git clone --depth 1 --branch main \
@@ -36,5 +28,10 @@ RUN rm -rf /tmp/qwen3-training /app/lora-release && \
 
 COPY config.py handler.py requirements.txt ./
 COPY pipeline/ ./pipeline/
+
+# requirements.txt is installed AFTER the pinned CUDA build of torch above,
+# with --no-deps so pip cannot pull in a different torch build and break the
+# CUDA wheel that was just installed.
+RUN python -m pip install --no-cache-dir --no-deps -r requirements.txt
 
 CMD ["python", "-u", "handler.py"]
