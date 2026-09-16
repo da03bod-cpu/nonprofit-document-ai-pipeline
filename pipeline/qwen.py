@@ -28,7 +28,7 @@ def _load_model():
         QWEN_MODEL_NAME,
         quantization_config=quant,
         device_map="auto",
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         trust_remote_code=True,
     )
 
